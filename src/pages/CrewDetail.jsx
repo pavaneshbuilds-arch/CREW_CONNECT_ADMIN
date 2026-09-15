@@ -4,6 +4,7 @@ import { api, mediaUrl } from '../api/client.js';
 import PageHeader from '../components/PageHeader.jsx';
 import StatusBadge from '../components/StatusBadge.jsx';
 import ConfirmDialog from '../components/ConfirmDialog.jsx';
+import MaskedValue from '../components/MaskedValue.jsx';
 import { dayName, formatDate } from '../utils/format.js';
 
 export default function CrewDetail() {
@@ -104,11 +105,29 @@ export default function CrewDetail() {
           <h3>Identity & bank</h3>
           <dl className="kv" style={{ marginTop: 12 }}>
             <dt>Aadhaar</dt>
-            <dd>{crew.identityDocuments?.aadhaarMasked || '—'}</dd>
+            <dd>
+              <MaskedValue
+                label="Aadhaar number"
+                masked={crew.identityDocuments?.aadhaarMasked}
+                value={crew.identityDocuments?.aadhaarNumber}
+              />
+            </dd>
             <dt>PAN</dt>
-            <dd>{crew.identityDocuments?.panMasked || '—'}</dd>
+            <dd>
+              <MaskedValue
+                label="PAN number"
+                masked={crew.identityDocuments?.panMasked}
+                value={crew.identityDocuments?.panNumber}
+              />
+            </dd>
             <dt>Account</dt>
-            <dd>{crew.bankDetails?.accountNumberMasked || '—'}</dd>
+            <dd>
+              <MaskedValue
+                label="bank account number"
+                masked={crew.bankDetails?.accountNumberMasked}
+                value={crew.bankDetails?.accountNumber}
+              />
+            </dd>
             <dt>Holder</dt>
             <dd>{crew.bankDetails?.accountHolderName || '—'}</dd>
             <dt>IFSC</dt>

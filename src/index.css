@@ -230,7 +230,23 @@ tr:hover td { background: #faf6ee; }
 .login-card h1 { margin: 8px 0 6px; }
 .login-card p { color: var(--muted); margin-top: 0; }
 .login-card form { display: flex; flex-direction: column; gap: 14px; margin-top: 22px; }
-.login-card button { margin-top: 6px; }
+.login-card .btn { margin-top: 6px; }
+.password-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.password-field input {
+  width: 100%;
+  min-width: 0;
+  padding-right: 42px;
+}
+.password-field .reveal-btn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+}
 
 .detail-grid {
   display: grid;
@@ -241,6 +257,37 @@ tr:hover td { background: #faf6ee; }
 .kv dt { color: var(--muted); font-size: 13px; }
 .kv dd { margin: 0; }
 .kv-row { display: contents; }
+.masked-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+}
+.masked-value-text {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+.reveal-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.reveal-btn:hover,
+.reveal-btn:focus-visible {
+  color: var(--ink);
+  background: #f3eee4;
+}
+.reveal-btn[aria-pressed='true'] {
+  color: var(--ink);
+}
 .log-json {
   margin: 0;
   padding: 12px 14px;
