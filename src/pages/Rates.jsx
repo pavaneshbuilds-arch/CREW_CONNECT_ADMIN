@@ -13,7 +13,26 @@ const ROLES = [
   { key: 'bouncer', label: 'Bouncer' },
 ];
 
-const emptyForm = { waiter: '', supervisor: '', bouncer: '', note: '' };
+const emptyForm = {
+  waiter: '',
+  supervisor: '',
+  bouncer: '',
+  waiterPercent: '',
+  supervisorPercent: '',
+  bouncerPercent: '',
+  note: '',
+};
+
+function percentKey(role) {
+  return `${role}Percent`;
+}
+
+function crewAmountFor(rate, percent) {
+  const amount = Number(rate);
+  const share = Number(percent);
+  if (!Number.isFinite(amount) || !Number.isFinite(share)) return null;
+  return Math.round(((amount * share) / 100) * 100) / 100;
+}
 
 function roleLabel(role) {
   return ROLES.find((r) => r.key === role)?.label || role;
@@ -87,12 +106,16 @@ export default function Rates() {
   async function loadRates() {
     const res = await api.get('/api/v1/admin/rates');
     const rates = res.data?.rates || {};
+    const percents = res.data?.crewSharePercents || {};
     setSaved(res.data);
     setGstPercent(res.data?.gstPercent ?? null);
     setForm({
       waiter: rates.waiter ?? '',
       supervisor: rates.supervisor ?? '',
       bouncer: rates.bouncer ?? '',
+      waiterPercent: percents.waiter ?? '',
+      supervisorPercent: percents.supervisor ?? '',
+      bouncerPercent: percents.bouncer ?? '',
       note: '',
     });
   }
@@ -136,18 +159,32 @@ export default function Rates() {
     setNotice('');
     try {
       const body = {};
+      const crewSharePercent = {};
       for (const { key } of ROLES) {
         const next = Number(form[key]);
         const current = Number(saved?.rates?.[key]);
-        if (Number.isFinite(next) && next !== current) body[key] = next;
+        if (!Number.isFinite(next) || next < 1) {
+          setError(`${roleLabel(key)} price must be at least 1.`);
+          return;
+        }
+        if (next !== current) body[key] = next;
+
+        const nextPercent = Number(form[percentKey(key)]);
+        const currentPercent = Number(saved?.crewSharePercents?.[key]);
+        if (!Number.isFinite(nextPercent) || nextPercent < 0 || nextPercent > 100) {
+          setError(`${roleLabel(key)} crew share must be between 0 and 100.`);
+          return;
+        }
+        if (nextPercent !== currentPercent) crewSharePercent[key] = nextPercent;
       }
+      if (Object.keys(crewSharePercent).length) body.crewSharePercent = crewSharePercent;
       if (form.note.trim()) body.note = form.note.trim();
-      if (!ROLES.some(({ key }) => body[key] != null)) {
+      if (!ROLES.some(({ key }) => body[key] != null) && !Object.keys(crewSharePercent).length) {
         setNotice('No rate changes to save.');
         return;
       }
       await api.patch('/api/v1/admin/rates', body);
-      setNotice('Rates updated. New bookings will use these amounts.');
+      setNotice('Saved. New bookings will charge these prices and store the crew share.');
       await loadRates();
       await loadLogs();
     } catch (err) {
@@ -187,7 +224,7 @@ export default function Rates() {
     <>
       <PageHeader
         title="Crew rates"
-        subtitle="Fixed amount paid to each person for an event (not hourly). Organizers still enter hours for the shift length; price is count × this rate. Changes are logged and do not rewrite existing bookings."
+        subtitle="The price is what the organizer is charged per person for the event. Crew share is the percentage of that price paid to the crew member. Hours are the shift length only. Changes apply to new bookings and do not rewrite amounts already stored."
       />
       {error ? <div className="error-banner">{error}</div> : null}
       {notice ? (
@@ -197,32 +234,60 @@ export default function Rates() {
       ) : null}
 
       <form className="card card-pad" onSubmit={save} style={{ marginBottom: 16 }}>
-        <div className="toolbar" style={{ marginBottom: 0 }}>
-          {ROLES.map(({ key, label }) => (
-            <div className="field" key={key}>
-              <label htmlFor={`rate-${key}`}>{label} ₹ / event</label>
-              <input
-                id={`rate-${key}`}
-                type="number"
-                min="1"
-                step="1"
-                value={form[key]}
-                onChange={(e) => setForm({ ...form, [key]: e.target.value })}
-                required
-              />
-            </div>
-          ))}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+            gap: 16,
+          }}
+        >
+          {ROLES.map(({ key, label }) => {
+            const crewAmount = crewAmountFor(form[key], form[percentKey(key)]);
+            return (
+              <div key={key} style={{ display: 'grid', gap: 10 }}>
+                <strong>{label}</strong>
+                <div className="field">
+                  <label htmlFor={`rate-${key}`}>Charged to organizer (₹ / event)</label>
+                  <input
+                    id={`rate-${key}`}
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={form[key]}
+                    onChange={(e) => setForm({ ...form, [key]: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor={`share-${key}`}>Crew share %</label>
+                  <input
+                    id={`share-${key}`}
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    value={form[percentKey(key)]}
+                    onChange={(e) => setForm({ ...form, [percentKey(key)]: e.target.value })}
+                    required
+                  />
+                </div>
+                <span style={{ color: 'var(--muted)', fontSize: 13 }}>
+                  Crew receives {crewAmount != null ? money(crewAmount) : '—'} per person
+                </span>
+              </div>
+            );
+          })}
+        </div>
+        <div className="toolbar" style={{ marginTop: 12, marginBottom: 0 }}>
           <div className="field">
             <label>GST</label>
             <input value={gstPercent != null ? `${gstPercent}%` : '—'} disabled />
           </div>
-        </div>
-        <div className="toolbar" style={{ marginTop: 12, marginBottom: 0 }}>
           <input
             placeholder="Note (optional) — e.g. Q3 rate card"
             value={form.note}
             onChange={(e) => setForm({ ...form, note: e.target.value })}
-            style={{ flex: 1, minWidth: 240 }}
+            style={{ flex: 1, minWidth: 240, alignSelf: 'end' }}
           />
           <button className="btn btn-gold" type="submit" disabled={busy}>
             {busy ? 'Saving…' : 'Save rates'}
@@ -306,7 +371,7 @@ export default function Rates() {
         </div>
       </form>
 
-      <PageHeader title="Change log" subtitle="Who changed a rate, from what, to what." />
+      <PageHeader title="Change log" subtitle="Who changed a price or crew share, from what, to what." />
       <div className="toolbar">
         <FilterSelect
           value={role}
@@ -331,8 +396,10 @@ export default function Rates() {
                 <tr>
                   <th>When</th>
                   <th>Role</th>
-                  <th>Previous</th>
-                  <th>New</th>
+                  <th>Previous price</th>
+                  <th>New price</th>
+                  <th>Previous share</th>
+                  <th>New share</th>
                   <th>Note</th>
                   <th>Changed by</th>
                 </tr>
@@ -344,6 +411,8 @@ export default function Rates() {
                     <td>{roleLabel(row.role)}</td>
                     <td>{money(row.previousRate)}</td>
                     <td>{money(row.newRate)}</td>
+                    <td>{row.previousCrewSharePercent != null ? `${row.previousCrewSharePercent}%` : '—'}</td>
+                    <td>{row.newCrewSharePercent != null ? `${row.newCrewSharePercent}%` : '—'}</td>
                     <td>{row.note || '—'}</td>
                     <td>{row.changedBy?.fullName || row.changedBy?.email || '—'}</td>
                   </tr>

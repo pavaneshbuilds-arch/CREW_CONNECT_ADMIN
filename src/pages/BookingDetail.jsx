@@ -74,7 +74,10 @@ export default function BookingDetail() {
         <ul>
           {(booking.crewRequirements || []).map((r) => (
             <li key={r.id}>
-              {r.countRequired} × {r.role} @ {money(r.rate)} = {money(r.amount)}
+              {r.countRequired} × {r.role} charged {money(r.rate)} each ({money(r.amount)} total)
+              {r.crewAmount != null
+                ? ` · crew ${r.crewSharePercent}% receives ${money(r.crewAmount)} each (${money(r.crewPayout)} total)`
+                : ''}
             </li>
           ))}
         </ul>
