@@ -5,6 +5,12 @@ import PageHeader from '../components/PageHeader.jsx';
 import StatusBadge from '../components/StatusBadge.jsx';
 import { formatDate, formatDateTime, money } from '../utils/format.js';
 
+function taxLine(percent, amount) {
+  const value = money(amount);
+  if (percent == null || percent === '') return value;
+  return `${percent}% · ${value}`;
+}
+
 export default function BookingDetail() {
   const { id } = useParams();
   const [booking, setBooking] = useState(null);
@@ -40,6 +46,10 @@ export default function BookingDetail() {
             <dd>{booking.guestCount ?? '—'}</dd>
             <dt>Subtotal</dt>
             <dd>{money(booking.subtotal)}</dd>
+            <dt>CGST</dt>
+            <dd>{taxLine(booking.cgstPercent, booking.cgstAmount)}</dd>
+            <dt>SGST</dt>
+            <dd>{taxLine(booking.sgstPercent, booking.sgstAmount)}</dd>
             <dt>GST</dt>
             <dd>{money(booking.gstAmount)}</dd>
             <dt>Discount</dt>

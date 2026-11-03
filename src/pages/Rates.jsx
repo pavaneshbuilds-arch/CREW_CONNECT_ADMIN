@@ -20,6 +20,8 @@ const emptyForm = {
   waiterPercent: '',
   supervisorPercent: '',
   bouncerPercent: '',
+  cgstPercent: '',
+  sgstPercent: '',
   note: '',
 };
 
@@ -32,6 +34,13 @@ function crewAmountFor(rate, percent) {
   const share = Number(percent);
   if (!Number.isFinite(amount) || !Number.isFinite(share)) return null;
   return Math.round(((amount * share) / 100) * 100) / 100;
+}
+
+function taxTotal(cgst, sgst) {
+  const a = Number(cgst);
+  const b = Number(sgst);
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+  return Math.round((a + b) * 100) / 100;
 }
 
 function roleLabel(role) {
@@ -92,7 +101,6 @@ export default function Rates() {
   const [params, setParams] = useSearchParams();
   const [form, setForm] = useState(emptyForm);
   const [saved, setSaved] = useState(null);
-  const [gstPercent, setGstPercent] = useState(null);
   const [logs, setLogs] = useState([]);
   const [meta, setMeta] = useState(null);
   const [ranges, setRanges] = useState([]);
@@ -108,7 +116,6 @@ export default function Rates() {
     const rates = res.data?.rates || {};
     const percents = res.data?.crewSharePercents || {};
     setSaved(res.data);
-    setGstPercent(res.data?.gstPercent ?? null);
     setForm({
       waiter: rates.waiter ?? '',
       supervisor: rates.supervisor ?? '',
@@ -116,6 +123,8 @@ export default function Rates() {
       waiterPercent: percents.waiter ?? '',
       supervisorPercent: percents.supervisor ?? '',
       bouncerPercent: percents.bouncer ?? '',
+      cgstPercent: res.data?.cgstPercent ?? '',
+      sgstPercent: res.data?.sgstPercent ?? '',
       note: '',
     });
   }
@@ -178,13 +187,39 @@ export default function Rates() {
         if (nextPercent !== currentPercent) crewSharePercent[key] = nextPercent;
       }
       if (Object.keys(crewSharePercent).length) body.crewSharePercent = crewSharePercent;
+
+      const nextCgst = Number(form.cgstPercent);
+      const nextSgst = Number(form.sgstPercent);
+      if (!Number.isFinite(nextCgst) || nextCgst < 0 || nextCgst > 100) {
+        setError('CGST must be between 0 and 100.');
+        return;
+      }
+      if (!Number.isFinite(nextSgst) || nextSgst < 0 || nextSgst > 100) {
+        setError('SGST must be between 0 and 100.');
+        return;
+      }
+      if (Math.round((nextCgst + nextSgst) * 100) / 100 > 100) {
+        setError('CGST and SGST together cannot exceed 100%.');
+        return;
+      }
+      if (nextCgst !== Number(saved?.cgstPercent)) body.cgstPercent = nextCgst;
+      if (nextSgst !== Number(saved?.sgstPercent)) body.sgstPercent = nextSgst;
+
       if (form.note.trim()) body.note = form.note.trim();
-      if (!ROLES.some(({ key }) => body[key] != null) && !Object.keys(crewSharePercent).length) {
-        setNotice('No rate changes to save.');
+      const ratesChanged = ROLES.some(({ key }) => body[key] != null) || Object.keys(crewSharePercent).length > 0;
+      const taxChanged = body.cgstPercent != null || body.sgstPercent != null;
+      if (!ratesChanged && !taxChanged) {
+        setNotice('No changes to save.');
         return;
       }
       await api.patch('/api/v1/admin/rates', body);
-      setNotice('Saved. New bookings will charge these prices and store the crew share.');
+      if (taxChanged && ratesChanged) {
+        setNotice('Saved. New bookings will use these prices, crew shares, and CGST / SGST rates.');
+      } else if (taxChanged) {
+        setNotice('Saved. New bookings will use these CGST and SGST rates.');
+      } else {
+        setNotice('Saved. New bookings will charge these prices and store the crew share.');
+      }
       await loadRates();
       await loadLogs();
     } catch (err) {
@@ -220,11 +255,13 @@ export default function Rates() {
     }
   }
 
+  const gstPercent = taxTotal(form.cgstPercent, form.sgstPercent);
+
   return (
     <>
       <PageHeader
         title="Crew rates"
-        subtitle="The price is what the organizer is charged per person for the event. Crew share is the percentage of that price paid to the crew member. Hours are the shift length only. Changes apply to new bookings and do not rewrite amounts already stored."
+        subtitle="The price is what the organizer is charged per person for the event. Crew share is the percentage of that price paid to the crew member. CGST and SGST are each a percent of the booking subtotal. Hours are the shift length only. Changes apply to new bookings and do not rewrite amounts already stored."
       />
       {error ? <div className="error-banner">{error}</div> : null}
       {notice ? (
@@ -280,7 +317,33 @@ export default function Rates() {
         </div>
         <div className="toolbar" style={{ marginTop: 12, marginBottom: 0 }}>
           <div className="field">
-            <label>GST</label>
+            <label htmlFor="cgst">CGST %</label>
+            <input
+              id="cgst"
+              type="number"
+              min="0"
+              max="100"
+              step="0.01"
+              value={form.cgstPercent}
+              onChange={(e) => setForm({ ...form, cgstPercent: e.target.value })}
+              required
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="sgst">SGST %</label>
+            <input
+              id="sgst"
+              type="number"
+              min="0"
+              max="100"
+              step="0.01"
+              value={form.sgstPercent}
+              onChange={(e) => setForm({ ...form, sgstPercent: e.target.value })}
+              required
+            />
+          </div>
+          <div className="field">
+            <label>GST (CGST + SGST)</label>
             <input value={gstPercent != null ? `${gstPercent}%` : '—'} disabled />
           </div>
           <input
