@@ -92,6 +92,10 @@ export default function CrewDetail() {
             <dd>{crew.skills?.join(', ') || '—'}</dd>
             <dt>Joined</dt>
             <dd>{formatDate(crew.createdAt)}</dd>
+            <dt>No-shows</dt>
+            <dd>{crew.noShowCount ?? 0}</dd>
+            <dt>Replacements</dt>
+            <dd>{crew.replacementCount ?? 0}</dd>
             {crew.rejectionReason ? (
               <>
                 <dt>Rejection</dt>

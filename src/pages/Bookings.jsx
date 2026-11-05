@@ -42,7 +42,7 @@ export default function Bookings() {
 
   return (
     <>
-      <PageHeader title="Bookings" subtitle="Events placed by organizers. Assignment actions come in a later release." />
+      <PageHeader title="Bookings" subtitle="Events placed by organizers. Open a booking to mark a no-show or fill an open slot." />
       {error ? <div className="error-banner">{error}</div> : null}
       <div className="toolbar">
         <input

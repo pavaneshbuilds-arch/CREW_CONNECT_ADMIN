@@ -9,7 +9,7 @@ Web console for platform operators. Talks to [CREW_CONNECT_API](../CREW_CONNECT_
 - Crew list + verification (approve / reject / suspend)
 - Profile edit requests
 - Organizers
-- Bookings (read-only)
+- Bookings (mark no-show, add a replacement, or assign crew into an open paid slot)
 - Coupons (create / edit / deactivate, usage limits and discount cap)
 - Crew rates + supervisor staffing ranges
 - Audit + activity logs

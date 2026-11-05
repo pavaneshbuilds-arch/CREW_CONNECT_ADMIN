@@ -1,9 +1,23 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api, mediaUrl } from '../api/client.js';
+import AssignCrewDialog from '../components/AssignCrewDialog.jsx';
+import ConfirmDialog from '../components/ConfirmDialog.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import StatusBadge from '../components/StatusBadge.jsx';
-import { formatDate, formatDateTime, money } from '../utils/format.js';
+import { formatDate, formatDateTime, labelize, money } from '../utils/format.js';
+
+const ACTIONABLE = ['confirmed', 'crew_assigned', 'in_progress'];
+const CAN_NO_SHOW = ['assigned', 'confirmed'];
+const FILLED = ['assigned', 'confirmed', 'in_progress', 'completed'];
+
+function filledCount(booking, role) {
+  return (booking.assignments || []).filter((row) => row.role === role && FILLED.includes(row.status)).length;
+}
+
+function shortLabel(role) {
+  return role === 'supervisor' ? 'Under powered' : 'Under filled';
+}
 
 function taxLine(percent, amount) {
   const value = money(amount);
@@ -15,16 +29,33 @@ export default function BookingDetail() {
   const { id } = useParams();
   const [booking, setBooking] = useState(null);
   const [error, setError] = useState('');
+  const [picker, setPicker] = useState(null);
+  const [noShowTarget, setNoShowTarget] = useState(null);
+
+  function load() {
+    return api
+      .get(`/api/v1/admin/bookings/${id}`)
+      .then((res) => {
+        setBooking(res.data);
+        setError('');
+      })
+      .catch((err) => {
+        setError(err.message);
+        throw err;
+      });
+  }
 
   useEffect(() => {
-    api
-      .get(`/api/v1/admin/bookings/${id}`)
-      .then((res) => setBooking(res.data))
-      .catch((err) => setError(err.message));
+    load().catch(() => {});
   }, [id]);
 
   if (!booking && !error) return <p>Loading…</p>;
   if (!booking) return <div className="error-banner">{error}</div>;
+
+  const canAct = ACTIONABLE.includes(booking.status);
+  const replacedIds = new Set(
+    (booking.assignments || []).map((row) => row.replacesAssignmentId).filter(Boolean)
+  );
 
   return (
     <>
@@ -114,14 +145,30 @@ export default function BookingDetail() {
       <div className="card card-pad" style={{ marginTop: 16 }}>
         <h3>Crew requirements</h3>
         <ul>
-          {(booking.crewRequirements || []).map((r) => (
-            <li key={r.id}>
-              {r.countRequired} × {r.role} charged {money(r.rate)} each ({money(r.amount)} total)
-              {r.crewAmount != null
-                ? ` · crew ${r.crewSharePercent}% receives ${money(r.crewAmount)} each (${money(r.crewPayout)} total)`
-                : ''}
-            </li>
-          ))}
+          {(booking.crewRequirements || []).map((r) => {
+            const filled = filledCount(booking, r.role);
+            const open = Math.max(0, r.countRequired - filled);
+            return (
+              <li key={r.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
+                <span>
+                  {filled}/{r.countRequired} × {r.role} charged {money(r.rate)} each ({money(r.amount)} total)
+                  {r.crewAmount != null
+                    ? ` · crew ${r.crewSharePercent}% receives ${money(r.crewAmount)} each (${money(r.crewPayout)} total)`
+                    : ''}
+                  {open > 0 ? (
+                    <span className="pill pending" style={{ marginLeft: 8 }}>
+                      {shortLabel(r.role)}
+                    </span>
+                  ) : null}
+                </span>
+                {canAct && open > 0 ? (
+                  <button type="button" className="btn btn-sm" onClick={() => setPicker({ role: r.role })}>
+                    Assign crew
+                  </button>
+                ) : null}
+              </li>
+            );
+          })}
         </ul>
       </div>
 
@@ -144,28 +191,68 @@ export default function BookingDetail() {
                 <th>Shift end</th>
                 <th>Assigned</th>
                 <th>Assigned by</th>
+                <th />
               </tr>
             </thead>
             <tbody>
-              {(booking.assignments || []).map((a) => (
-                <tr key={a.id}>
-                  <td>
-                    <Link to={`/crew/${a.crewId}`}>{a.crew?.fullName || a.crewId}</Link>
-                  </td>
-                  <td>{a.crew?.phoneNumber || '—'}</td>
-                  <td>{a.role}</td>
-                  <td>{a.assignmentMethod?.replace('_', ' ')}</td>
-                  <td>
-                    <StatusBadge value={a.status} />
-                  </td>
-                  <td>{money(a.earningsAmount)}</td>
-                  <td>{money(a.performanceBonus)}</td>
-                  <td>{formatDateTime(a.shiftStartedAt)}</td>
-                  <td>{formatDateTime(a.shiftCompletedAt)}</td>
-                  <td>{formatDateTime(a.createdAt)}</td>
-                  <td>{a.assignedByAdmin?.fullName || a.assignedByAdmin?.email || '—'}</td>
+              {(booking.assignments || []).length === 0 ? (
+                <tr>
+                  <td colSpan={12}>No crew assigned yet</td>
                 </tr>
-              ))}
+              ) : (
+                booking.assignments.map((a) => {
+                  const required =
+                    (booking.crewRequirements || []).find((row) => row.role === a.role)?.countRequired ?? 0;
+                  const open = Math.max(0, required - filledCount(booking, a.role));
+                  return (
+                    <tr key={a.id}>
+                      <td>
+                        <Link to={`/crew/${a.crewId}`}>{a.crew?.fullName || a.crewId}</Link>
+                      </td>
+                      <td>{a.crew?.phoneNumber || '—'}</td>
+                      <td>{a.role}</td>
+                      <td>
+                        {a.assignmentMethod === 'replacement' ? (
+                          <span className="pill replacement">Replacement</span>
+                        ) : (
+                          labelize(a.assignmentMethod)
+                        )}
+                        {a.replaces ? (
+                          <div style={{ color: 'var(--muted)', fontSize: 12 }}>
+                            for{' '}
+                            <Link to={`/crew/${a.replaces.crewId}`}>{a.replaces.fullName || a.replaces.crewId}</Link>
+                          </div>
+                        ) : null}
+                      </td>
+                      <td>
+                        <StatusBadge value={a.status} />
+                      </td>
+                      <td>{money(a.earningsAmount)}</td>
+                      <td>{money(a.performanceBonus)}</td>
+                      <td>{formatDateTime(a.shiftStartedAt)}</td>
+                      <td>{formatDateTime(a.shiftCompletedAt)}</td>
+                      <td>{formatDateTime(a.createdAt)}</td>
+                      <td>{a.assignedByAdmin?.fullName || a.assignedByAdmin?.email || '—'}</td>
+                      <td>
+                        {canAct && CAN_NO_SHOW.includes(a.status) ? (
+                          <button type="button" className="btn btn-danger btn-sm" onClick={() => setNoShowTarget(a)}>
+                            Mark no-show
+                          </button>
+                        ) : null}
+                        {canAct && a.status === 'no_show' && !replacedIds.has(a.id) && open > 0 ? (
+                          <button
+                            type="button"
+                            className="btn btn-sm"
+                            onClick={() => setPicker({ role: a.role, replacesAssignmentId: a.id })}
+                          >
+                            Add replacement
+                          </button>
+                        ) : null}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
@@ -244,6 +331,28 @@ export default function BookingDetail() {
           </table>
         </div>
       </div>
+      {error ? <div className="error-banner">{error}</div> : null}
+      {picker ? (
+        <AssignCrewDialog
+          bookingId={id}
+          role={picker.role}
+          replacesAssignmentId={picker.replacesAssignmentId}
+          onClose={() => setPicker(null)}
+          onAssigned={load}
+        />
+      ) : null}
+      {noShowTarget ? (
+        <ConfirmDialog
+          title="Mark this crew member as a no-show?"
+          message={`${noShowTarget.crew?.fullName || 'This person'} keeps the date blocked and no longer fills the ${noShowTarget.role} slot. You can add a replacement afterwards.`}
+          confirmLabel="Mark no-show"
+          danger
+          onConfirm={() =>
+            api.post(`/api/v1/admin/bookings/${id}/assignments/${noShowTarget.id}/no-show`).then(load)
+          }
+          onClose={() => setNoShowTarget(null)}
+        />
+      ) : null}
     </>
   );
 }
