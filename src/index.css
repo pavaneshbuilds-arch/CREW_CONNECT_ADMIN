@@ -204,6 +204,7 @@ tr:hover td { background: #faf6ee; }
 .pill.pending, .pill.pending_payment { background: var(--warn-soft); color: var(--warn); }
 .pill.approved, .pill.confirmed, .pill.completed, .pill.success { background: var(--ok-soft); color: var(--ok); }
 .pill.rejected, .pill.cancelled, .pill.failed { background: var(--danger-soft); color: var(--danger); }
+.pill.expired { background: #eee; color: #666; }
 .pill.crew_assigned, .pill.in_progress { background: var(--info-soft); color: var(--info); }
 .pill.active { background: var(--ok-soft); color: var(--ok); }
 .pill.inactive { background: #eee; color: #666; }

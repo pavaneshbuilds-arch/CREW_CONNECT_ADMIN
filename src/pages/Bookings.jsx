@@ -63,6 +63,7 @@ export default function Bookings() {
             { value: 'in_progress', label: 'In progress' },
             { value: 'completed', label: 'Completed' },
             { value: 'cancelled', label: 'Cancelled' },
+            { value: 'expired', label: 'Expired' },
           ]}
         />
       </div>
